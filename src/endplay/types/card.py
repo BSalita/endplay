@@ -1,46 +1,56 @@
 __all__ = ["Card"]
 
+from dataclasses import dataclass
+from typing import Optional
+
 from endplay.types.denom import Denom
 from endplay.types.rank import Rank
 
+
+@dataclass(frozen=True)
 class Card:
-	"Representation of a card as a suit and rank"
-	def __init__(self, name: str = None, *, suit: Denom = None, rank: Rank = None):
-		"""
-		Construct a card either from a string name or from Denom and Rank objects
+    """
+    Immutabale class representing a card with `suit` and `rank` read-only attributes
 
-		:param name: The name of the card, e.g. "S9" or "HT"
-		:param suit: The suit of the card
-		:param rank: The rank of the card
-		"""
-		if name is not None:
-			try:
-				suit, rank = name.upper()
-			except ValueError:
-				raise ValueError(f"Could not parse card name {name}: must be 2 characters in length")
-			try:	
-				self.suit = Denom("SHDC".index(suit))
-				self.rank = Rank[f"R{rank}"]
-			except ValueError:
-				raise ValueError(f"Could not parse card name {name}: invalid suit")
-			except KeyError:
-				raise ValueError(f"Could not parse card name {name}: invalid rank")
-		else:
-			if not isinstance(suit, Denom):
-				raise ValueError("suit must be of type Denom")
-			self.suit = suit
-			if not isinstance(rank, Rank):
-				raise ValueError("rank must be of type Rank")
-			self.rank = rank
-			
-	def __hash__(self):
-		return hash((self.rank, self.suit))
+    :ivar suit: The suit of the card
+    :vartype suit: Denom
+    :ivar rank: The rank of the card
+    :vartype rank: Rank
+    """
 
-	def __eq__(self, other: 'Card') -> bool:
-		return self.rank == other.rank and self.suit == other.suit
+    rank: Rank
+    suit: Denom
 
-	def __repr__(self) -> str:
-		return f"Card('{self!s}')"
-		
-	def __str__(self) -> str:
-		return f"{self.suit.abbr}{self.rank.abbr}"
+    def __init__(
+        self,
+        name: Optional[str] = None,
+        *,
+        suit: Optional[Denom] = None,
+        rank: Optional[Rank] = None,
+    ):
+        """
+        Construct a card either from a string name or from Denom and Rank objects
+
+        :param name: The name of the card, e.g. "S9" or "HT"
+        :param suit: The suit of the card
+        :param rank: The rank of the card
+        """
+        if name is None:
+            if suit is None or rank is None:
+                raise ValueError("either name or both suit and rank must be defined")
+            object.__setattr__(self, "suit", suit)
+            object.__setattr__(self, "rank", rank)
+        else:
+            suit = Denom.find(name[0])
+            rank = Rank.find(name[1])
+
+        if not isinstance(suit, Denom):
+            raise ValueError("suit must be of type Denom")
+        object.__setattr__(self, "suit", suit)
+
+        if not isinstance(rank, Rank):
+            raise ValueError("rank must be of type Rank")
+        object.__setattr__(self, "rank", rank)
+
+    def __str__(self) -> str:
+        return f"{self.suit.abbr}{self.rank.abbr}"

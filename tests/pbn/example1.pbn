@@ -1,0 +1,66 @@
+% PBN 2.1
+% EXPORT
+
+[Event "16th European Youth Team Championships"]
+[Site "Vienna, Austria AUT"]
+[Date "1998.07.16"]
+[Board "1"]
+[West "Gloyer A"]
+[North "Linde J"]
+[East "Saurer B"]
+[South "Balschun R"]
+[Dealer "N"]
+[Vulnerable "None"]
+[Deal "N:T32.AKQ7.T3.AQJT A9864.83.AK4.987 J.JT9542.72.K653 KQ75.6.QJ9865.42"]
+[Scoring "?"]
+[Declarer "S"]
+[Contract "5H"]
+[Result "10"]
+[Auction "N"]
+1C 1S 2H 4S
+5H Pass Pass Pass
+[Play "W"]
+DQ D3 D4 D2
+SK S2 S4 SJ
+DJ DT DK D7
+*
+[HomeTeam "J-germany"]
+[Room "Open"]
+[Round "1"]
+[Score "NS -50"]
+[Section "Junior Teams"]
+[Table "7"]
+[VisitTeam "J-austria"]
+
+[Event "16th European Youth Team Championships"]
+[Site "Vienna, Austria AUT"]
+[Date "1998.07.16"]
+[Board "1"]
+[West "Kornek A"]
+[North "Lindermann A"]
+[East "Huesken F"]
+[South "Purstl C"]
+[Dealer "N"]
+[Vulnerable "None"]
+[Deal "N:T32.AKQ7.T3.AQJT A9864.83.AK4.987 J.JT9542.72.K653 KQ75.6.QJ9865.42"]
+[Scoring "?"]
+[Declarer "N"]
+[Contract "4H"]
+[Result "10"]
+[Auction "N"]
+1NT Pass 4C Pass
+4H Pass Pass Pass
+[Play "E"]
+DA D2 D5 D3
+C9 C3 C2 CA
+H3 H2 H6 HA
+H8 H4 D9 HK
+*
+[HomeTeam "J-germany"]
+[Room "Closed"]
+[Round "1"]
+[Score "NS 420"]
+[Section "Junior Teams"]
+[Table "7"]
+[VisitTeam "J-austria"]
+

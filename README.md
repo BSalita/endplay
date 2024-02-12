@@ -4,46 +4,95 @@
 
 If you find this useful and would like to contribute, or found it totally buggy and broken and want to fix it, then I am very open to contributions.
 
+<!-- markdown-toc start - Don't edit this section. Run M-x markdown-toc-refresh-toc -->
+**Table of Contents**
+
+- [endplay](#endplay)
+    - [Building and installing](#building-and-installing)
+        - [From PyPI](#from-pypi)
+        - [From source](#from-source)
+        - [For development](#for-development)
+        - [Building the documentation](#building-the-documentation)
+        - [Running the test suite](#running-the-test-suite)
+    - [Overview of submodules](#overview-of-submodules)
+    - [Tutorial](#tutorial)
+        - [Inspecting deals](#inspecting-deals)
+            - [Enumerated types](#enumerated-types)
+            - [The `interact` module](#the-interact-module)
+        - [Generating hands](#generating-hands)
+            - [The main module](#the-main-module)
+        - [Evaluating hands](#evaluating-hands)
+            - [Assigning point values to hands](#assigning-point-values-to-hands)
+            - [Evaluating shape](#evaluating-shape)
+        - [Double dummy analysis](#double-dummy-analysis)
+            - [Analyse](#analyse)
+            - [DD Tables](#dd-tables)
+            - [Par contract calculation and scoring contracts](#par-contract-calculation-and-scoring-contracts)
+            - [Bids and auctions: an aside](#bids-and-auctions-an-aside)
+            - [Solving for a player's hand](#solving-for-a-players-hand)
+        - [Parsing to and from bridge file formats (PBN, LIN, JSON)](#parsing-to-and-from-bridge-file-formats-pbn-lin-json)
+
+<!-- markdown-toc end -->
+
 ## Building and installing
 
-### Using `pip`
+### From PyPI
 
-Binary Python wheels are built and distributed on [PyPi](https://pypi.org/project/endplay/) for the following Python versions:
+Binary Python wheels are built and distributed on [PyPI](https://pypi.org/project/endplay/) for the following Python versions:
 
 | Architecture | Windows  | Linux    | MacOS    |
-| ------------ | -------- | -------- | :------- |
-| x86          | 3.7-3.10 | N/A      | 3.7-3.10 |
-| x64          | 3.7-3.10 | 3.7-3.10 | 3.7-3.10 |
+| ------------ | -------- | -------- | -------- |
+| x86          | N/A      | N/A      | 3.7-3.11 |
+| x64          | 3.7-3.11 | 3.7-3.11 | 3.7-3.11 |
 
 On these systems `python3 -m pip install endplay` will install these pre-built wheels, otherwise it will attempt to install from the source distribution which requires a C++ compiler on your system. Note that *endplay* requires Python 3.7+.
 
+The version of the library available on PyPI may be older than the current status of the repo, this is to ensure stability of these builds. For access to the latest bug fixes and preview features, you can install directly from the GitHub repo with `python3 -m pip install +git:https://github.com/dominicprice/endplay`
+
 ### From source
 
-*endplay* uses `setuptools` to manage its build and can be built with the `build` package:
+*endplay* uses `setuptools` to manage its build and can be installed with `pip`.
 
 ```bash
 # Clone repo and submodules
 git clone --recursive https://github.com/dominicprice/endplay.git
 cd endplay
-# Only build is required to start the build, other packages 
-# are automatically fetched
-python3 -m pip install build
-# This will generate the wheel in the dist directory
-python3 -m build
-python3 -m pip install dist/endplay-<VERSIONSUFFIX>.whl
+python3 -m pip install .
 ```
 
-The compiled components of the library are built using CMake. An in-source build (for e.g. debugging) can be done by setting the install prefix to the current directory:
+If you want to build the binary wheels for your system, you can use the `build` package. This will create an isolated environment when collecting packages so you do not need to perform this in a virtual environment.
 
 ```bash
-# Create the build directory
-mkdir out && cd out
-# Configure, generate makefiles and build
-cmake -DCMAKE_BUILD_TYPE=<Debug|Release> -DCMAKE_INSTALL_PREFIX=../endplay .. 
-cmake --build . --target install --config <Debug|Release>
+# Only build is required to start the build, other packages
+# are automatically fetched
+python3 -m pip install build
+python3 -m build # generates dist/endplay-<VERSIONSUFFIX>.whl
 ```
 
-where one of the configurations `Debug` or `Release` should be specified. The `--config` parameter only needs to be passed with a toolset such as MSVC where the build type is not set at configuration time.
+### For development
+
+If you are trying to develop for the library, then it is recommended to do all your testing in a virtual environment:
+
+```bash
+python3 -m pip install virtualenv
+virtualenv venv
+source venv/bin/activate # on windows, `cmd venv\scripts\activate`
+python -m pip install . # installs into the created venv
+```
+
+You can then modify some files, and when you want to debug simply rerun `python -m pip install .` and the old build will be overwritten. This also has the advantage of being able to reuse the cache from the previous install (including the CMake cache) which speeds up build time.
+
+If you are not planning on modifying the underlying C library, its packaging logic or the config file, then you can avoid having to reinstall each time by making an in-source build and symlinking this into your site packages. The simplest way to do this is to run the following from the root directory:
+```bash
+mkdir build && cd build
+cmake -DCMAKE_INSTALL_PREFIX=../src ..
+cmake --build . --target install
+cd ../src
+pwd > "$(python -m site --user-site)/endplay.pth"
+```
+The last command will work on POSIX systems, on Windows you can get the site packages directory by running `python -m site --user-site` and creating a file `endplay.pth` there with a single line containing the absolute path to `<ENDPLAY_ROOT>/src`.
+
+The `.gitignore` is set up to ignore the files CMake installs so no extra care needs to be taken when staging and committing your changes to git.
 
 ### Building the documentation
 
@@ -72,17 +121,17 @@ python3 -m pytest
 
 - `endplay.types` is the basis for the whole library, providing the classes which are used by all the other modules for encapsulating the key objects in bridge. The 'master' class is `Deal`, whose state consists of the four hands in the deal, the cards played to the current trick,  a trump suit and the player to lead to the current trick. All the methods one would expect to  be defined on this are provided - accessing the hands, playing/unplaying cards from the current trick, importing and exporting from PBN format etc. From this class there is a hierarchy of types `Deal -> Hand -> SuitHolding -> Rank` which allows introspection of the deal at any level wanted. Many other types, such as containers for holding results from double dummy analysis and storing contracts, are also provided here.
 
-- `endplay.dealer` provides functions for generating bridge hands. The main function is `generate_deals`  which can accept a list of constraints (either  functions which accept a `Deal` object and return `True`/`False`, or strings written in [dealer syntax](https://www.bridgebase.com/tools/dealer/Manual/input.html)) and generates a specified number of deals which satisfy the constraints. The `dealer` module can also be run as a main module with `python3 -m endplay.dealer` which works very similarly to the  Hans van Staveren [dealer program](https://www.bridgebase.com/tools/dealer/Manual/), but with some different output options and extra functionality.
+- `endplay.dealer` provides functions for generating bridge hands. The main function is `generate_deals`  which can accept a list of constraints (either  functions which accept a `Deal` object and return `True`/`False`, or strings written in [dealer syntax](https://www.bridgebase.com/tools/dealer/Manual/input.html)) and generates a specified number of deals which satisfy the constraints. The `dealer` module can also be run as a main module with `python3 -m endplay.dealer` (or simply `endplay-dealer`) which works very similarly to the  Hans van Staveren [dealer program](https://www.bridgebase.com/tools/dealer/Manual/), but with some different output options and extra functionality.
 
 - `endplay.evaluate` is the simplest component, consisting of a variety of functions which evaluate various properties of bridge hands, such as calculating high  card points, shape, losers, controls and other algorithms for estimating the quality of a hand.
 
-- `endplay.dds` is a high-level wrapper around Bo Haglund's [dds library](https://github.com/dds-bridge/dds) which takes care of converting between the different types and encodings it uses internally and providing sensible defaults for things such as the number of threads it uses. A lower level wrapper `endplay._dds`, which is little more than the basic `ctypes` declarations, is also provided and is used internally by the dds functions when making library calls. 
+- `endplay.dds` is a high-level wrapper around Bo Haglund's [dds library](https://github.com/dds-bridge/dds) which takes care of converting between the different types and encodings it uses internally and providing sensible defaults for things such as the number of threads it uses. A lower level wrapper `endplay._dds`, which is little more than the basic `ctypes` declarations, is also provided and is used internally by the dds functions when making library calls.
 
-- `endplay.parsers` provides tools for parsing common file types which are used as inputs and outputs for bridge software, this includes PBN and Dealer. These produce document tree representation of the input files and are used internally for many things, but can also be traversed manually to create programs which interact with other bridge software easily
+- `endplay.parsers` provides tools for parsing common file types which are used as inputs and outputs for bridge software, this includes PBN and Dealer. These produce document tree representation of the input files and are used internally for many things, but can also be traversed manually to create programs which interact with other bridge software easily.
 
-- `endplay.interact` is a CLI tool which provides a simple REPL for analysing bridge deals. It can either be used via the `interact` function in the API, or as a main module with `python3 -m endplay.interact`
+- `endplay.interact` provides the `CommandObject` class which keeps an undo stack whenever its state is modified, making it easier to interact with the deal. The main purpose of the module is to provide a tool to create interactive deal programs, such as the main module (`python3 -m endplay.interact` or `endplay-interact`) which provides a a set of frontends analysing bridge deals.
 
-  
+
 
 ## Tutorial
 
@@ -127,7 +176,7 @@ Hand("974.AJ3.63.AK963")
 ♥ Q
 ♦ AQT852
 ♣ QJT
->>> for h in d:
+>>> for p, h in d:
 ...   print(h)
 974.AJ3.63.AK963
 K83.K9752.7.8752
@@ -135,7 +184,7 @@ AQJ5.T864.KJ94.4
 T62.Q.AQT852.QJT
 ```
 
-If your terminal doesn't handle the Unicode suit symbols, then you can tell *endplay* to use the letters SHDC instead:
+Note that iterating over the deal returns `(Player, Hand)` tuples. If your terminal doesn't handle the Unicode suit symbols, then you can tell *endplay* to use the letters SHDC instead:
 
 ```python
 >>> from endplay import config
@@ -145,6 +194,20 @@ S T62
 H Q
 D AQT852
 C QJT
+```
+
+If there is a particular section of code which you would like to turn off unicode suit symbols for, for example if you are trying to export to export to a certain file format or would just like a particular piece of output to be formatted in plaintext, then you can use the `suppress_unicode` context manager:
+
+```python
+>>> config.use_unicode = True
+>>> from endplay.config import suppress_unicode
+>>> print(Denom.spades.abbr)
+♠
+>>> with suppress_unicode():
+...   print(Denom.spades.abbr)
+S
+>>> print(Denom.spades.abbr)
+♠
 ```
 
 The `Hand` object which is returned is bound to the data inside the deal, so any operations you perform on the hand will update the deal too; to get a copy of the hand which doesn't affect the deal object you should use the `copy` method. `Deal` also overloads the `__setitem__` function and accepts a `Hand` object which is copied into the deal, or a PBN string which sets the cards in the hand to the specified cards:
@@ -157,7 +220,7 @@ The `Hand` object which is returned is bound to the data inside the deal, so any
 >>> d.west = "AQ..T964.QJ975" # equivalent
 ```
 
-Modifying the contents of the hand can be done using the `add`, `extend` and `remove` methods. `add` and `remove` return `True` if the the operation was successful: attempting to remove a card which isn't in a hand, or adding a card which is already there causes it to return `False`. 
+Modifying the contents of the hand can be done using the `add`, `extend` and `remove` methods. `add` and `remove` return `True` if the operation was successful: attempting to remove a card which isn't in a hand, or adding a card which is already there causes it to return `False`.
 
 ```python
 >>> h = Hand()
@@ -184,7 +247,7 @@ False
 ♠Q, ♥A, ♣T
 ```
 
-The individual suit holdings in the hand can be examined by using the `spades`, `hearts`, `diamonds` and `clubs` properties or using the `__getitem__` operator. This returns a `SuitHolding` object which, like accessing hands of a deal, returns an object which is bound to the data in the hand. Many of the methods defined in `Hand` are also defined in `SuitHolding`, but use the `Rank` class instead of the `Card` class:
+`Card` objects are immutable, but should not be tested for equality using identity (i.e. use `==` not `is`). The individual suit holdings in the hand can be examined by using the `spades`, `hearts`, `diamonds` and `clubs` properties or using the `__getitem__` operator. This returns a `SuitHolding` object which, like accessing hands of a deal, returns an object which is bound to the data in the hand. Many of the methods defined in `Hand` are also defined in `SuitHolding`, but use the `Rank` class instead of the `Card` class:
 
 ```python
 >>> s = h.spades
@@ -194,8 +257,8 @@ True
 Q2.A..T
 >>> Rank.RQ in s
 True
->>> for card in s:
-...   print(card)
+>>> for rank in s:
+...   print(rank)
 Rank.RQ
 Rank.R2
 ```
@@ -206,7 +269,7 @@ Holdings in a hand can be specified using the `__setitem__` operator too:
 >>> h.diamonds = "9752"
 ```
 
-Moving back to the `Deal` object itself, as well as the four hands it also contains some other information such as the trump suit, player on lead and cards played to the current trick. Many functions in the *endplay* library will ignore these values, but the double dummy solving algorithms in particular may rely on these to provide accurate results. The trump suit and player on lead can be set by setting the `tump` and `first` properties respectively:
+Moving back to the `Deal` object itself, as well as the four hands it also contains some other information such as the trump suit, player on lead and cards played to the current trick. Many functions in the *endplay* library will ignore these values, but the double dummy solving algorithms in particular may rely on these to provide accurate results. The trump suit and player on lead can be set by setting the `trump` and `first` properties respectively:
 
 ```python
 >>> d = Deal("65..2. .A.AK. .J.97. 8..83.")
@@ -232,7 +295,7 @@ Tricks can be played by using the `play` method, and picked up using the `unplay
               J
               97
               ---
->>> d.play("DA") 
+>>> d.play("DA")
 >>> d.unplay() # East picks back up the DA
 >>> d.play("HA") # try ruffing instead...
 >>> d.play("D9")
@@ -266,7 +329,7 @@ RuntimeError: Trying to play card not in hand
 >>> d.play("HA", fromHand=False) # let's hope N isn't paying too much attention
 ```
 
-Similarly `unplay` can be passed `toHand=False` to not move the picked-up card back into somebody's hand. The contents of the current trick can be examined by looking at the `curtrick` property which returns a list of cards played to the current trick, however this is a read-only object and attempting to modify it will not alter the `Deal` object.
+Similarly, `unplay` can be passed `toHand=False` to not move the picked-up card back into somebody's hand. The contents of the current trick can be examined by looking at the `curtrick` property which returns a list of cards played to the current trick, however this is a read-only object and attempting to modify it will not alter the `Deal` object.
 
 #### Enumerated types
 
@@ -275,49 +338,25 @@ Similarly `unplay` can be passed `toHand=False` to not move the picked-up card b
 - They have a static `find` method which allows them to be constructed from a string, e.g. `Denom.find("hearts")`, `Penalty.find("x")` or `Vul.find("ew")`. There are often multiple ways of expressing these objects as strings (suit-symbols vs letters, *luv* vs *none* for vulnerability etc.) and the `find` method does its best to convert whatever string you give it into a value. This raises a `ValueError` if the conversion fails
 - As well as the `name` property inherited from `Enum` which returns a lowercase string, they also have an `abbr` property which return a one or two character abbreviation for the object. This is used by e.g. the `Card` class to construct a string representation of the card (the `__str__` method consists of the single line `return f"{self.suit.abbr}{self.rank.abbr}"`)
 
-All enumerations can have their members iterated over using e.g. `for x in Player` , however many also provide functions which allow iterating over the elements in a different order or over a subset of the elements (e.g. `Denom.suits()`, `Denom.bidorder()`). A full list of the methods can be found in the API reference of the documentation.
+All enumerations can have their members iterated over using e.g. `for x in Player` , however many also provide functions which allow iterating over the elements in a different order or over a subset of the elements (e.g. `Denom.suits()`, `Denom.bidorder()`). A few other unique methods for the enumerated types include
+
+- `Denom.is_major()`/`Denom.is_minor()`/`Denom.is_suit()`
+- `Player.lho`/`Player.partner`/`Player.rho`. Rotating a player `n` positions left or right can be done with `Player.next(n)` and `Player.prev(n)`
+- `Vul.from_board(n)` for determining vulnerability from board number.
+- `Rank` has a sister-class `AlternateRank` which is used internally by some double dummy routines, but should not be used outside of this context.
+
+A full list of the methods can be found in the API reference of the documentation.
 
 #### The `interact` module
 
-One of my main motivations for building up this library is that sometimes I just want a quick way to see how a hand would play in a particular contract, or step through a deal card by card checking to see if a particular play would work. Using an interactive Python environment this is relatively easy, but in the end I developed a separate module called `interact` which implements (using the Python `cmd` library) its own REPL specifically for moving through a hand. It can be run by executing `python3 -m endplay.interact`. You will be greeted by an empty hand diagram. 
+One of my main motivations for building up this library is that sometimes I just want a quick way to see how a hand would play in a particular contract, or step through a deal card by card checking to see if a particular play would work. Using an interactive Python environment this is relatively easy, but in the end I developed a separate module called `interact` which implements a variety of frontends for interacting with deals. they can be run by executing `python3 -m endplay.interact`, and a specific frontend can be selected by using the `-x FRONTEND` flag:
+* `-x cmd` The default frontend, a simple REPL inside your terminal
+* `-x curses` A curses frontend which runs inside the terminal
+* `-x html` An HTML frontend which opens inside your web browser, with the python program acting as a local server.
 
-```
-   Board 1    ---
-    Vul -     ---
-   N deals    ---
-              ---
----                         ---
----                         ---
----                         ---
----                         ---
-              ---
-              ---
-              ---
-              ---
-N>
-```
+Both the `cmd` and `curses` frontends require you to enter shell-like commands such as `shuffle`, `deal 'PBNSTRING'` or `play SA`. You can type `help` to get a list of all available commands, or `help CMDNAME` to get a specific help message about a command. The `html` interface allows you to click on cards and buttons to interact with it, which under the hood it turns into these commands which it sends back to the server.
 
-You can specify a deal by typing `redeal <PBN string>`, or generate a random deal by typing `shuffle <constraint>` (more information on constraints can be found in the next section, *Generating hands*) 
-
-```
-N> shuffle hcp(north) > 20
-
-   Board 1    KQT73
-    Vul -     KQ
-   N deals    K
-              AKJ65
-J64                         A852
-J8                          T7654
-QJ542                       A98
-874                         9
-              9
-              A932
-              T763
-              QT32
-N>
-```
-
-From here you can access many of the `Deal` and `Hand` methods; you can specify a deal by typing `redeal <PBN string>`, set a particular hand by typing `set <player> <PBN string>`, play a card by typing `play <card name>` and set the trump suit and player on lead with `trump <denom>` and `first <player>`. A full list of commands can be brought up by typing `help`, and more information on how a specific command works by typing `help <command name>`. This module also provides access to some of the double dummy solving features, the Python API of which is described farther down in this quick-start guide. 
+The interactive interface keeps account of all the actions which have taken place, allowing you to type commands such as `undo` and `redo` to go back and forth through the state (or `rewind` and `fastforward` to go to either end of the history).
 
 ### Generating hands
 
@@ -366,7 +405,7 @@ Internally, `generate_deal` generates random deals and checks whether they satis
 >>> d = generate_deal("hcp(north) >= 20 && hcp(north) <= 22 && shape(north, any 4333 + any 4432 + any 5332)")
 ```
 
-This is ok for experimenting, but there is a large overhead involved with parsing and evaluating the string as this is currently all implemented in non-optimised Python, so if you are looking to do stats over many thousands of hands it is recommended to create a function instead. 
+This is ok for experimenting, but there is a large overhead involved with parsing and evaluating the string as this is currently all implemented in non-optimised Python, so if you are looking to do stats over many thousands of hands it is recommended to create a function instead.
 
 If you need to generate more than one deal then the generator function `generate_deals` is supplied. It accepts the exact same parameters as `generate_deal` with an extra `produce` parameter which defaults to 40. The deals are yielded, so if you want to collect them into a list then this must be done manually with `list(generate_deals())` , however iterating over the lists as they are generated can be done with the natural `for deal in generate_deals():` construct.
 
@@ -376,11 +415,11 @@ The `dealer` module can also be run as a program by executing `python3 -m endpla
 
 ```
 produce 2 // Number of hands we want to output
-west1n = 
-	hcp(west) >= 15 && 
-	hcp(west) <= 17 && 
+west1n =
+	hcp(west) >= 15 &&
+	hcp(west) <= 17 &&
 	shape(west, any 4333 + any 4432 + any 5332)
-eastStayman = 
+eastStayman =
 	hcp(east) >= 10 &&
 	(hearts(east) == 4 || spades(east) == 4) &&
 	hearts(east) < 5 && spades(east) < 5
@@ -426,9 +465,148 @@ Running this on my machine takes a few minutes, even with only 30 hands, as the 
 
 Of course, had we set up `stayman.dl` to produce bidding patterns for north and south, 2-way swapping would be significantly worse as swapping the east west hands does not change the value of the predicate.
 
+### Evaluating hands
+
+When constructing constraints for use with the `generate_deal`/`generate_deals` functions, or performing statistics over deals, various metrics for evaluating the quality of various aspects of a hand are useful. *endplay* comes with a variety of functions for evaluating hands in the `endplay.evaluate` submodule. A full list of the functions contained in this submodule can be found in the API documentation; the list here is merely representative of the sorts of things which can be done.
+
+#### Assigning point values to hands
+
+By far the most well known and widely applied metric for calculating the quality of a hand is the traditional 'high card points' scale where we assign points to each of the face cards: 4 for an ace, 3 for a king, 2 for a queen and 1 for a jack. The `hcp` function can be used to evaluate a hand or suit holding using this metric:
+
+```python
+>>> from endplay.types import Hand
+>>> from endplay.evaluate import hcp
+>>> hand = Hand("AQ963.J64.852.K2")
+>>> hcp(hand)
+10
+>>> hcp(hand.hearts)
+1
+```
+
+Although the 4321 metric is the most widely applied, it is sometimes preferable to use a different scale. One such scale is the *Bergen scale* which assigns 4.5/3/1.5/0.75/0.25 to the top 5 cards. This scale is built into endplay as `bergen_hcp_scale` and the `hcp` can be told to use it by passing it as the second parameter:
+
+```python
+>>> from endplay.evaluate import bergen_hcp_scale
+>>> hcp(hand, bergen_hcp_scale)
+9.75
+```
+
+If you want to use your own custom scale, then you can pass a list of numbers containing the point values of the cards in the order A, K, Q, J, ..., 3, 2. If the list has less than 13 values, then it is assumed to be continued with zeroes:
+
+```python
+>>> custom_hcp_scale = [6,4,2,1] # A=6, K=4, Q=2, J=1, all other cards worth no points
+>>> hcp(hand, custom_hcp_scale)
+13
+```
+
+Another quality of the hand which is often described in terms of points is the distribution. A common system is to assign 3 points for a void, 2 points for a singleton and a single point for a doubleton. This is the standard behaviour of the `dist_points` function:
+
+```python
+>>> from endplay.evaluate import dist_points
+>>> hand2 = Hand("AK.JT98765..Q963")
+>>> dist_points(hand2)
+4
+>>> dist_points(hand2.diamonds)
+3
+```
+
+As with the high card points scale, there are many different ways of counting points and so the `dist_points` function accepts a `scale` parameter which defines the counting method. *endplay* comes with five different scales built into the `evalute` module:
+
+- `shortage_nofit_dist_scale`: The standard 3/2/1 scale
+- `shortage_fit_dist_scale`: A 5/3/1 scale, often applied to a hand once a trump fit has been found
+- `length_dist_scale`: Assigns a point for every extra card in a suit longer than 4, e.g. a five card suit is worth 1 point and a seven card suit is worth 3.
+- `mixed_nofit_dist_scale`: A combination of `shortage_nofit_dist_scale` and `length_dist_scale`
+- `mixed_fit_dist_scale`: A combination of `shortage_fit_dist_scale` and `length_dist_scale`
+
+Custom scales can be passed as lists where the `n`th element (zero-indexed) is the number of points awarded to a suit of length `n`, and as with the `hcp` function the list is assumed to be padded with zeroes if later elements are omitted. As an example, the following scale just counts the number of tripletons in a hand:
+
+```python
+>>> tripletons = [0, 0, 0, 1]
+>>> dist_points(hand, tripletons)
+2
+>>> dist_points(hand2, tripletons)
+0
+```
+
+If a trump suit is found, then it usually the case that shortage points are not included in the calculation of distribution points. To account for this, `dist_points` also takes an `exclude` parameter with a list of suits to exclude from the calculation. Note that this is ignored if the object is a `SuitHolding` instead of a `Hand`:
+
+```python
+>>> dist_points(hand2, exclude=[Denom.spades])
+3
+>>> dist_points(hand2.diamonds, exclude=[Denom.diamonds])
+3
+```
+
+High card points and distribution points are often combined into a scale known as 'total points'. In its most basic form, this is simply the sum of the two metrics:
+
+```python
+>>> from endplay.evaluate import total_points
+>>> total_points(hand2) # = hcp(hand2) + dist_points(hand2) = 10 + 4
+14
+```
+
+An optional `trump` parameter can be provided with a suit which is added to the `exclude` list of `dist_points`:
+
+```python
+>>> total_points(hand2, trump=Denom.spades)
+13
+```
+
+Unprotected honours, i.e. honours which will drop if the opponents play higher honours from the top, are often discounted from the total points calculation. This can be enabled by setting the `protect_honours` flag:
+
+```python
+>>> total_points(hand) # 10 HCP and 1 doubleton
+11
+>>> total_points(hand, protect_honours=True) #Jxx drops and the point is removed
+10
+```
+
+A more advanced method of calculating the overall strength of a hand is the [Kaplan Four Cs](http://www.rpbridge.net/8j19.htm) method which is implemented in the `cccc` algorithm:
+
+```python
+>>> from endplay.evaluate import cccc
+>>> cccc(hand)
+11.15
+>>> cccc(hand2)
+13.950000000000001
+```
+
+#### Evaluating shape
+
+The shape of a hand can be evaluated using the `shape` and `exact_shape` functions; the former returns the shape ordered from longest to shortest whilst the latter always returns the shape in the order spades, hearts, diamonds and clubs:
+
+```python
+>>> from endplay.types import Hand
+>>> from endplay.evaluate import shape, exact_shape
+>>> h = Hand("AK92.A3.Q9.AK762")
+>>> shape(h)
+[5, 4, 2, 2]
+>>> exact_shape(h)
+[4, 2, 2, 5]
+```
+
+Various predicate functions are provided to query more generally the 'class' of the hand shape:
+
+```python
+>>> from endplay.evaluate import is_balanced, is_semibalanced, is_single_suited, is_two_suited
+>>> is_balanced(h) # 4333, 4432 or 5332
+False
+>>> is_semibalanced(h) # balanced or 5422
+True
+>>> is_single_suited(h) # 6 or more cards in one suit
+False
+>>> is_two_suited(h) # 10 cards in two suits
+False
+```
+
+There are more variants on these and optional parameters to fine tune their definitions, which can be found in the API documentation.
+
+
+
+
 ### Double dummy analysis
 
-A particularly important feature of *endplay* is the ability to call routines from the [C++ dds library](https://github.com/dds-bridge/dds). The library is built and distributed with *endplay* so it is not necessary to have a copy of the library built on your machine. 
+A particularly important feature of *endplay* is the ability to call routines from the [C++ dds library](https://github.com/dds-bridge/dds). The library is built and distributed with *endplay* so it is not necessary to have a copy of the library built on your machine.
 
 The double-dummy solving algorithms are split across four components:
 
@@ -437,7 +615,7 @@ The double-dummy solving algorithms are split across four components:
 - `endplay.dds.par` provides par contract calculation algorithms
 - `endplay.dds.solve` provides functions for calculating the maximum number of tricks each card in a player's hand can make
 
-NB: out of laziness, I will often refer to 'maximum number of tricks' instead of 'double-dummy maximum number of tricks', i.e. the number of tricks that can be made assuming everybody at the table has perfect knowledge of where all the cards are and makes optimal plays at each opportunity. 
+NB: out of laziness, I will often refer to 'maximum number of tricks' instead of 'double-dummy maximum number of tricks', i.e. the number of tricks that can be made assuming everybody at the table has perfect knowledge of where all the cards are and makes optimal plays at each opportunity.
 
 Most algorithms come in two variants, one which calculates a result for a single deal and a second which accepts multiple deals. The multiple deal variant is trivial to use if you understand how the single-deal versions work, so will not be covered here, but if you need to do calculations for multiple deals it is always better to use versions as they use multithreading and can reuse internal data structures.
 
@@ -487,7 +665,7 @@ As everyone has played optimally (not that EW get much of a chance to make a mis
 Despite being on the surface being nothing more than a computationally expensive way of printing a load of zeroes, it is worth noting two interesting things here:
 
 1. The number of tricks is displayed from the perspective of the player to the right of player on lead. This is because it attempts to show declarers trick count, and in a full deal the declarer is to the right of the person on lead. In this case, as we have a four card ending with declarer on lead we can pass `declarer_is_first=True` to perform the swap and print `4, 4, 4, ...`
-2. There are 16 cards in the play history, but only 13 cards in the output. Two things are going on here: a) the number of tricks before any card is played is appended to the front and b) as the last four cards are all forced and noone can alter the outcome of the contract at this stage these are not calculated by the algorithm. Therefore the number of cards returned in this instance is 16 (cards in play history) + 1 (starting tricks) - 4 (remove final trick) = 13.
+2. There are 16 cards in the play history, but only 13 cards in the output. Two things are going on here: a) the number of tricks before any card is played is appended to the front and b) as the last four cards are all forced and no-one can alter the outcome of the contract at this stage these are not calculated by the algorithm. Therefore the number of cards returned in this instance is 16 (cards in play history) + 1 (starting tricks) - 4 (remove final trick) = 13.
 
 We all know that partner will never find this line though, so lets see what the function does when we play bridge ping-pong:
 
@@ -520,7 +698,7 @@ Because the `analyse_play` function calculates the maximum tricks before any car
 
 The `ddtable` module consists of two functions, `calc_dd_table` and its multiple-deal variant `calc_all_tables`. The slight naming inconsistency is in order to keep the naming convention consistent with the original DDS library.
 
-This is one of the simplest and most powerful functions in the `dds` module. Let's cast our minds back to 1975 with [this famous deal](http://www.rpbridge.net/7a31.htm) and remember just how thin the 7♣ contract really is: 
+This is one of the simplest and most powerful functions in the `dds` module. Let's cast our minds back to 1975 with [this famous deal](http://www.rpbridge.net/7a31.htm) and remember just how thin the 7♣ contract really is:
 
 ```python
 >>> from endplay.types import Deal, Player, Denom
@@ -531,8 +709,8 @@ This is one of the simplest and most powerful functions in the `dds` module. Let
      ♣  ♦  ♥  ♠ NT
   N 13 10  9 13 13
   S 13 10  9 13 13
-  W  0  2  4  0  0
   E  0  2  4  0  0
+  W  0  2  4  0  0
 ```
 
 Individual results are accessible through the overloaded `__getitem__` operator:
@@ -547,7 +725,7 @@ If, like me, you can never remember whether the table is indexed by strain or se
 >>> assert(table[Player.south, Denom.clubs] == 13)
 ```
 
-The multiple-deal variant `calc_all_tables` accepts an extra argument not available to `calc_dd_table` with a list of strains to be excluded from the calculation, if e.g. you want to calculate how a series of deals would play in notrumps and don't want to waste time calculating the table for the other strains. In this case, the results for all other strains will be set to 0. The `exclude` parameter can be any iterable, so `[Denom.notrumps, Denom.hearts]`would produce results for clubs, diamonds and spades, or in the example below we use `Denom.suits()` as a shorthand for excluding all the suits: 
+The multiple-deal variant `calc_all_tables` accepts an extra argument not available to `calc_dd_table` with a list of strains to be excluded from the calculation, if e.g. you want to calculate how a series of deals would play in notrumps and don't want to waste time calculating the table for the other strains. In this case, the results for all other strains will be set to 0. The `exclude` parameter can be any iterable, so `[Denom.notrumps, Denom.hearts]`would produce results for clubs, diamonds and spades, or in the example below we use `Denom.suits()` as a shorthand for excluding all the suits:
 
 ```python
 >>> from endplay.dds import calc_all_tables
@@ -556,8 +734,8 @@ The multiple-deal variant `calc_all_tables` accepts an extra argument not availa
      ♣  ♦  ♥  ♠ NT
   N  0  0  0  0 13
   S  0  0  0  0 13
-  W  0  0  0  0  0
   E  0  0  0  0  0
+  W  0  0  0  0  0
 ```
 
 (NB: If you don't understand how `table, *_ =` works then don't worry, it is just a quick way to store the first element of the returned list into `table` and the other elements, in this case an empty list as we only requested one table, into the variable `_` which we will throw away.)
@@ -637,6 +815,59 @@ You can calculate the score of an arbitrary contract by constructing a `Contract
 -1400
 ```
 
+#### Bids and auctions: an aside
+
+While on the topic of contracts, it is worth mentioning the `Bid` class which represents a call in an auction. `Bid` objects are very weird, as they fulfill a double purpose of being able to represent *penalty actions*, i.e. "Pass", "Double" and "Redoule", as well as *contract actions* which name a strain and a level. These are represented by the `PenaltyBid` and `ContractBid` classes respectively, which derive from `Bid` but define different member variables - `PenaltyBid.penalty` vs `ContractBid.denom` and `ContractBid.level`. You can construct these directly using their `__init__` functions:
+
+```python
+from endplay.types import PenaltyBid, ContractBid, Penalty, Denom
+>>> oneclub = ContractBid(1, Denom.clubs)
+>>> double = PenaltyBid(Penalty.double)
+```
+
+or by using the `Bid` constructor to supply the name of the bid as a string:
+
+```python
+>>> twohearts = Bid("2H")
+>>> double = Bid("double") # Bid("x") also works
+```
+
+Notice however that the type you get is actually always one of `PenaltyBid` or `ContractBid` - the `Bid` constructor will always automatically downcast the class instance to the appropriate type:
+
+```python
+>>> type(twohearts)
+<class 'endplay.types.bid.ContractBid'>
+>>> type(pass_)
+<class 'endplay.types.bid.PenaltyBid'>
+```
+
+All bid class constructors also accept optional boolean `alertable` and string `announcement` parameters, of which none, either or both can be defined to allow for the case where e.g. the point range of a notrump bid is announced but not alertable:
+
+```python
+>>> unusual2nt = Bid("2H", announcement="Weak")
+>>> forcing_pass = Bid("Pass", alertable=True, announcement="Forcing for one round")
+```
+
+The `alertable` and `announcement` attributes can be assigned and altered after construction of the `Bid` object, but the other properties are immutable.
+
+An auction is simply a list of bid objects:
+
+```python
+>>> auction = [
+...   oneclub,     forcing_pass, two_hearts, double,
+...   Bid("Pass"), Bid("Pass"),  Bid("pass") ]
+```
+
+To calculate a contract from a given auction, you can use the `Contract.from_auction` method and provide the name of the first player to bid:
+
+```python
+>>> from endplay.types import Player, Contract
+>>> Contract.from_auction(auction, Player.west)
+Contract("2♥Ex=")
+```
+
+Any iterable of `Bid` objects satisfying the [`Reversible`](https://docs.python.org/3/library/collections.abc.html#collections.abc.Reversible) interface can be passed as an auction.
+
 #### Solving for a player's hand
 
 The final module, `endplay.dds.solve`, provides the `solve_board`/`solve_all_boards` function pair which returns the number of tricks each card in a player's hand can yield. Let's go back to [a nice four card ending](https://www.bridgebum.com/criss_cross_squeeze.php):
@@ -697,3 +928,133 @@ K9                v♦A       ---
 
 Oops, out of luck! Notice how as opposed to the `analyse` family of functions, `solve_board` always returns the number of tricks the person playing the card can make.
 
+
+### Parsing to and from bridge file formats (PBN, LIN, JSON)
+
+While not the primary aim of the library, *endplay* does support experimental parsing and writing of PBN and LIN file formats. These interfaces are in the `endplay.parsers` submodule, and aim to provide an interface consistent with that of the standard library parsing libraries. Each of the parsing packages `endplay.parsers.pbn`, `endplay.parsers.lin` and `endplay.parsers.json` provide four functions:
+- `load`: Parse a file object into a list of `Board` objects
+- `loads`: Parse a string into a list of `Board` objects
+- `dump`: Write a list of `Board` objects to a file object
+- `dumps` Write a list of `Board` objects to a string
+
+Internally, each module provides `*Encoder` and `*Decoder` classes which do the heavy lifting. These can be used directly, but their interface may be unstable so cannot be recommended.
+
+The libraries store file information in lists of `endplay.types.Board` objects, which wrap a `Deal` as well as other information which is usually provided by these file formats. The full list of defined members can be found in the API reference as this is one of the bulkiest classes in *endplay*, in order to deal with the wealth of information that these file formats can store. We will present here a lighter introduction to the class by reading a PBN file and examining the result. We being by opening the sample PBN file in the examples directory and putting the first board into the variable `boardA`:
+
+```python
+>>> import endplay.parsers.pbn as pbn
+>>> with open("examples/pbn_files/sample.pbn") as f:
+...   boards = pbn.load(f)
+>>> boardA = boards[0]
+```
+
+From here we can explore a lot of the basic information about the deal using the tools which we have already learned:
+
+- The deal
+
+```python
+>>> boardA.deal.pprint()
+              AT9
+              2
+              J432
+              A9863
+KJ85                        76432
+AQT853                      4
+9                           KQ
+K4                          QJT72
+              Q
+              KJ976
+              AT8765
+              5
+```
+
+- The auction
+
+```python
+>>> from endplay.utils.io import pprint_auction
+>>> pprint_auction(boardA.dealer, boardA.auction, include_announcements=True)
+N    E    S    W
+P    P    1♥   P
+1NT  2♥*  3♦   4♠
+5♦   P    P    5♠*
+X    P    P    P
+
+2♥*: Spades & minor
+5♠*: ♠
+```
+
+- The play history
+
+```python
+>>> from endplay.dds import analyse_play
+>>> analyse_play(boardA.deal, boards[0].play)
+<SolvedPlay object; data=(8, 9, 9, 9, 9, 7, 7, 7, 7, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8)>
+```
+
+- Meta-information about the board. As this can store just about anything you might want it can get a bit messy, so although I have tried to keep it as basic as possible don't worry if the code samples below go in one ear and out the other
+
+```python
+>>> boardA.info.keys()
+dict_keys(['Event', 'Site', 'Date', 'West', 'North', 'East', 'South', 'Dealer', 'Scoring', 'Score', 'Table', 'HomeTeam', 'VisitTeam', 'ScoreIMP', 'DoubleDummyTricks', 'OptimumResultTable', 'OptimumScore', 'Competition'])
+>>> boardA.info.event # Dot access is case-insensitive
+'TestingPBN'
+>>> boardA.info["Site"] # Subscript access is case-sensitive
+'SampleTestSite'
+```
+
+PBN tags ending in `Table` (but not equal to `Table` - that key is for the table number the board was played at) are tabular data, and entries in the `Board.info` dictionary which end in `Table` are treated differently; instead of having string values they are dictionaries with keys for the column headings and the rows:
+
+```python
+>>> from pprint import pprint
+>>> pprint(boardA.info.OptimumResultTable)
+{'headers': ['Declarer',
+             {'alignment': 'R',
+              'minwidth': '2',
+              'name': 'Denomination',
+              'ordering': None},
+             {'alignment': 'R',
+              'minwidth': '2',
+              'name': 'Result',
+              'ordering': None}],
+ 'rows': [['N', 'NT', '7'],
+          ['N', 'S', '4'],
+          ['N', 'H', '6'],
+          ['N', 'D', '11'],
+          ['N', 'C', '5'],
+          ['W', 'NT', '5'],
+          ['W', 'S', '8'],
+          ['W', 'H', '6'],
+          ['W', 'D', '2'],
+          ['W', 'C', '7']]}
+```
+The `headers` key is a list of the column names; they can either be strings or dictionaries specifying how the columns should be displayed (see the API reference for more information). The `rows` key is a 2D list representing the rows of the table.
+
+In sample.pbn, the second board contains some fields with value "#" indicating that they should be copied over from the previous board, these are automatically resolved:
+
+```python
+>>> boardB = boards[1]
+>>> assert boardA.info.event == boardB.info.event
+```
+
+On the second board, the hand was passed out. The `Board` object is populated with an empty play history and a `Contract` object representing the pass:
+
+```python
+>>> boardB.play
+[]
+>>> boardB.contract
+Contract("Pass")
+```
+
+Using the `endplay.parsers.lin` module, we can export these boards to LIN in order to use them on BBO:
+
+```python
+>>> import endplay.parsers.lin as lin
+>>> l = lin.dumps(boards)
+>>> print(l)
+pn|JOHN SMITH,ARTHUR SOMEBODY,JORDAN PRESENTLY,EDWARD PEABODY|st||md|3S9TAH2D234JC3689A,S23467H4DQKC27TJQ,SQH679JKD5678TAC5,|rh||ah|Board 17|sv|o|mb|p|mb|p|mb|1H|mb|p|mb|1N|mb|2H|an| Spades & minor|mb|3D|mb|4S|mb|5D|mb|p|mb|p|mb|5S|an| !S|mb|d|mb|p|mb|p|mb|p|pg||pc|H2|pc|H4|pc|HK|pc|HA|pg||pc|D9|pc|D2|pc|DQ|pc|DA|pg||pc|C5|pc|C4|pc|CA|pc|C2|pg||pc|C9|pc|C7|pc|SQ|pc|CK|pg||pc|H6|pc|H8|pc|S9|pc|CT|pg||pc|C8|pc|CJ|pc|D5|pc|H3|pg||pc|S2|pc|D6|pc|SK|pc|SA|pg||pc|ST|pc|S3|pc|D7|pc|SJ|pg||mc|8|
+pn|LOUISE FORWEES,JEAN JEANY,MARTINE ESPEREDO,BRENDA CALLOUGHWAY|st||md|1S29JAH478D6TJC3QA,S3467H3TQD23C69JK,S8TKH69AD59AC2457,|rh||ah|Board 11|sv|o|mb|p|mb|p|mb|p|mb|p|pg||
+```
+
+Suit symbols are automatically escaped using the `!S`, `!H` etc... names used by BBO. Of course, far less information is stored in a LIN file than a PBN file and so many of the fields in the `info` dictionary of the `Board` are lost during the conversion. We can of course also `load` a LIN file and `dump` it into a PBN file, any keys which the PBN file expects which aren't provided by the LIN file can either be specified by appending to the `Board.info` dictionary, or else they will be given the default value of `?` as specified by the [PBN standard](https://www.tistis.nl/pbn/).
+
+Finally, for compatibility with projects which make use of other langauges or which need an easily parsable serialisation format, the `endplay.parsers.json` module provides the ability to parse to and from a JSON format defined [by this schema](https://dominicprice.github.io/schemas/endplay/v1/doc). Note that this is not an officially recognised schema but has been developed for the specific purpose of providing a JSON format which translates naturally to PBN and, in particular, the data types which *endplay* uses.

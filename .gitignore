@@ -5,13 +5,19 @@ __pycache__/
 
 # Visual studio local config files
 .vs/
+.vscode/
 CMakeSettings.json
 *.pyproj
 *.pyproj.user
 *.sln
+.env
+
+# Intellij local config files
+.idea/
 
 # Virtual environment
 venv/
+.python-version
 
 # Files produced by setup.py
 dist/
@@ -20,6 +26,7 @@ dist/
 # Files generated during build
 build/
 docs/build/
+docs/source/index.rst
 docs/source/pages/
 out/
 src/endplay/_dds/dds.dll
@@ -27,11 +34,19 @@ src/endplay/_dds/libdds.so
 src/endplay/_dds/__init__.py
 src/endplay/config.py
 
+# clangd files
+/.cache/
+/compile_commands.json
+
+# local config
+.pyrightconfig.json
+
 # Files generated during test
 TestResults/
 .coverage
 startup.py
-
+runfile
+src/dump.txt
 
 # No longer generated after switching form scikit-build
 MANIFEST
