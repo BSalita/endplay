@@ -4,6 +4,7 @@ from __future__ import annotations
 
 __all__ = ["LINEncodeError", "dump", "dumps", "load", "loads"]
 
+import re
 from typing import IO
 
 from more_itertools import chunked
@@ -34,8 +35,8 @@ class LINDecoder:
 
     def parse_line(self, line: str) -> Board:
         deal = None
-        auction = []
-        play = []
+        auction: list[Bid] = []
+        play: list[Card] = []
         board_num = None
         dealer = None
         vul = None
@@ -47,7 +48,32 @@ class LINDecoder:
         pairs = [(a, b) for a, b in zip(elems[::2], elems[1::2])]
         for key, value in pairs:
             if key == "st":
+                # small text
                 continue
+            elif key == "rh":
+                # reset heading
+                continue
+            elif key == "qx":
+                # create label
+                continue
+            elif key == "va":
+                # vertical adjust
+                continue
+            elif key == "sa":
+                # size auction
+                continue
+            elif key == "mn":
+                # Main name
+                continue
+            elif key == "bt":
+                # Main name
+                continue
+            elif key == "tu":
+                # Main name
+                continue
+            elif key == "nt":
+                # Marks an alert for the previous bid
+                auction[-1].announcement = unescape_suits(value)
             elif key == "pn":
                 # Player names are comma separated starting from south
                 info["South"], info["West"], info["North"], info["East"] = value.split(
@@ -112,14 +138,23 @@ class LINDecoder:
 
     def parse_string(self, lin: str) -> list[Board]:
         boards = []
-        for line in lin.splitlines():
+        # Use regex to split on 'pn|' but keep 'pn|' in the result
+        split_content = re.split(r"(pn\|)", lin)
+        final_split_content = []
+        for i in range(1, len(split_content), 2):
+            final_split_content.append(split_content[i] + split_content[i + 1])
+        for line in final_split_content:
             boards.append(self.parse_line(line))
         return boards
 
     def parse_file(self, f: IO[str]) -> list[Board]:
         boards = []
-        for line in f:
-            boards.append(self.parse_line(line))
+        # Read the file content
+        content = f.read()
+        # Remove CRLF characters
+        cleaned_content = content.replace("\r\n", "").replace("\n", "")
+
+        boards = self.parse_string(cleaned_content)
         return boards
 
 
